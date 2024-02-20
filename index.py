@@ -1,7 +1,11 @@
+from pathlib import Path
+
 from datasets import load_dataset
 from haystack import Document, Pipeline
+from haystack.components.converters import PyPDFToDocument
 from haystack.components.embedders import SentenceTransformersDocumentEmbedder
 from haystack.components.embedders import SentenceTransformersTextEmbedder
+from haystack.components.preprocessors import DocumentCleaner, DocumentSplitter
 from haystack.components.readers import ExtractiveReader
 from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
 from haystack.components.writers import DocumentWriter
@@ -10,19 +14,28 @@ from haystack.document_stores.in_memory import InMemoryDocumentStore
 model = "sentence-transformers/multi-qa-mpnet-base-dot-v1"
 
 
-def index():
-    dataset = load_dataset("bilgeyucel/seven-wonders", split="train")
-    documents = [Document(content=doc["content"], meta=doc["meta"]) for doc in dataset]
-    document_store = InMemoryDocumentStore()
-    indexing_pipeline = Pipeline()
-    indexing_pipeline.add_component(instance=SentenceTransformersDocumentEmbedder(model=model), name="embedder")
-    indexing_pipeline.add_component(instance=DocumentWriter(document_store=document_store), name="writer")
-    indexing_pipeline.connect("embedder.documents", "writer.documents")
+def index_programs():
 
-    print("Indexing documents...")
-    indexing_pipeline.run({"documents": documents})
-    print(document_store.count_documents())
-    print(document_store.to_dict())
+    # create an in-memory document store
+    document_store = InMemoryDocumentStore()
+
+    # create a pipeline with the components
+    pipeline = Pipeline()
+    pipeline.add_component("converter", PyPDFToDocument())
+    pipeline.add_component("cleaner", DocumentCleaner())
+    pipeline.add_component("splitter", DocumentSplitter(split_by="sentence", split_length=10))
+    pipeline.add_component("embedder", SentenceTransformersDocumentEmbedder(model=model))
+    pipeline.add_component("writer", DocumentWriter(document_store=document_store, policy="skip"))
+
+    # connect the components
+    pipeline.connect("converter", "cleaner")
+    pipeline.connect("cleaner", "splitter")
+    pipeline.connect("splitter", "embedder")
+    pipeline.connect("embedder", "writer")
+
+    # create a list of paths to the PDFs, by expanding the glob pattern
+    files = list(Path("programas/2024").glob("*.pdf"))
+    pipeline.run({"converter": {"sources": files}})
 
     return document_store
 
