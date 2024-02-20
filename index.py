@@ -54,9 +54,9 @@ def extractive_retriever(document_store):
 
 
 def main():
-    document_store = index()
+    document_store = index_programs()
     extractive_qa_pipeline = extractive_retriever(document_store)
-    query = "Who was Pliny the Elder?"
+    query = "Que partidos vão baixar o IVA?"
     extractive_qa_pipeline.run(data={"embedder": {"text": query}, "retriever": {"top_k": 3}, "reader": {"query": query, "top_k": 2}})
 
 
